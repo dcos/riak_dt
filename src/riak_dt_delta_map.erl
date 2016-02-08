@@ -165,7 +165,10 @@
 
 -module(riak_dt_delta_map).
 
+-include("r18.hrl").
+
 -behaviour(riak_dt).
+
 
 -ifdef(EQC).
 -include_lib("eqc/include/eqc.hrl").

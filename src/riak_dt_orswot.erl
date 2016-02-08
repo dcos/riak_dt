@@ -62,6 +62,8 @@
 %% @end
 -module(riak_dt_orswot).
 
+-include("r18.hrl").
+
 -behaviour(riak_dt).
 
 -ifdef(EQC).
