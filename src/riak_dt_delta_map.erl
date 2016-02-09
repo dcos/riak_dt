@@ -184,6 +184,7 @@
 -export([to_binary/2, from_binary/2]).
 -export([precondition_context/1, stats/1, stat/2]).
 -export([parent_clock/2, get_deferred/1]).
+-export([clock/1]).
 
 %, get_deferred/2
 
@@ -258,6 +259,12 @@ value({Clock, Values, _Deferred}) ->
 -spec value(term(), delta_map()) -> values().
 value(_, Map) ->
     value(Map).
+
+%% @doc get the clock for the map
+%%
+-spec clock(delta_map()) -> riak_dt_vclock:vclock().
+clock({Clock, _, _}) ->
+  Clock.
 
 %% @doc update the `map()' or a field in the `map()' by executing
 %% the `map_op()'. `Ops' is a list of one or more of the following
