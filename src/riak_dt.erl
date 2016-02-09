@@ -75,6 +75,9 @@ from_binary(Binary) ->
 
 %% @private
 -spec dict_to_orddict(dict()) -> orddict:orddict().
+dict_to_orddict(MaybeMap) when is_map(MaybeMap) ->
+  orddict:from_list(maps:to_list(MaybeMap));
 dict_to_orddict(Dict) ->
     orddict:from_list(dict:to_list(Dict)).
+
 
