@@ -6,9 +6,7 @@
 parse_transform(Forms, _Options) ->
   case has_maps() of
     true ->
-      Test = parse_trans:plain_transform(fun do_transform/1, Forms),
-      parse_trans:plain_transform(fun print_transform/1, Test),
-      Test;
+      parse_trans:plain_transform(fun do_transform/1, Forms);
     false ->
       Forms
   end.
@@ -74,9 +72,9 @@ do_transform(_Form) ->
   continue.
 
 % For debugging
-print_transform(Form) ->
-  io:format("Visited Form: ~w~n", [Form]),
-  continue.
+%print_transform(Form) ->
+%  io:format("Visited Form: ~w~n", [Form]),
+%  continue.
 
 has_maps() ->
   try maps:new() of
