@@ -63,7 +63,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
--define(DICT, dict).
+-include("dict.hrl").
 
 -spec new() -> delta_orswot().
 new() ->
@@ -178,42 +178,33 @@ apply_ops([Op | Rest], ActorOrDot, ORSet) ->
 
 -spec delta_update(orswot_op(), actor() | dot(), delta_orswot(), riak_dt:context()) ->
     {ok, delta_orswot()} | {error, not_implemented}.
-delta_update({add, Elem}, Actor, {Clock, _Entries, _Seen, _Def}=ORSet) ->
+delta_update({add, Elem}, Actor, {Clock, _Entries, _Seen, _Def}=_ORSet) ->
     {Dot, _NewClock} = update_clock(Actor, Clock),
-    {ok, Delta} = delta_add_elem(Elem, Dot, new()),
-    {ok, Update} = add_elem(Dot, ORSet, Elem),
-    {ok, {Update, Delta}};
-    %delta_add_elem(Elem, Dot, new());
+    delta_add_elem(Elem, Dot, new());
 
 delta_update({remove, Elem}, _Actor, {_, Entries, _, _}=ORSet) ->
-    {ok, Delta} = delta_remove_elem(Elem, ORSet, new()),
     {ok, ORSet} = remove_elem(?DICT:find(Elem, Entries), Elem, ORSet),
-    {ok, {ORSet, Delta}};
-    %delta_remove_elem(Elem, ORSet, new());
+    delta_remove_elem(Elem, ORSet, new());
 
-delta_update({remove_all, Elems}, Actor, ORSet0) ->
+delta_update({remove_all, Elems}, _Actor, ORSet0) ->
     Delta = lists:foldl(fun(Elem , ORSetAcc) ->
                                 {ok, ORSetAcc2} = delta_remove_elem(Elem, ORSet0, ORSetAcc),
                                 ORSetAcc2
                         end, new(), Elems),
-    {ok, ORSet} = remove_all(Elems, Actor, ORSet0),
-    {ok, {ORSet, Delta}};
-    %{ok, Delta};
+    {ok, Delta};
 
 %Batches of operations do not compose with the map... because operations have to reuse map's dot.
 %Must add what elements were removed to the seen to make it work with just one dot.
 delta_update({add_all, _Elems}, Actor, {_Clock0, _Entries, _Seen, _Deferred}) when is_tuple(Actor)->
     {error, not_implemented};
 
-delta_update({add_all, Elems}=Op, Actor, {Clock0, _Entries, _Seen, _Deferred}=Obj) ->
+delta_update({add_all, Elems}=_Op, Actor, {Clock0, _Entries, _Seen, _Deferred}=_Obj) ->
     {_, DeltaORSet} = lists:foldl(fun(Elem , {Clock, ORSetAcc}) ->
                                      {Dot, NewClock} = update_clock(Actor, Clock),
                                      {ok, Delta} = delta_add_elem(Elem, Dot, ORSetAcc),
                                      {NewClock, Delta}
                              end, {Clock0, new()}, Elems),
-    {ok, ORSet} = update(Op, Actor,Obj),
-    {ok, {ORSet,DeltaORSet}};
-    %{ok, DeltaORSet};
+    {ok, DeltaORSet};
 
 delta_update({update, Ops}, ActorOrDot, ORSet0) ->
     ORSet = lists:foldl(fun(Op, Set) ->
@@ -225,41 +216,31 @@ delta_update({update, Ops}, ActorOrDot, ORSet0) ->
     {ok, ORSet}.
 
 
-delta_update({add, Elem}, ActorOrDot, {Clock, _Entries, _Seen, _Deferred}=ORSet, _Ctx) ->
+delta_update({add, Elem}, ActorOrDot, {Clock, _Entries, _Seen, _Deferred}=_ORSet, _Ctx) ->
     {Dot, _} = update_clock(ActorOrDot, Clock),
-    {ok, Delta} = delta_add_elem(Elem, Dot, new()),
-    {ok, Update} = add_elem(Dot, ORSet, Elem),
-    {ok, {Update, Delta}};
-    %delta_add_elem(Elem, Dot, new());
+    delta_add_elem(Elem, Dot, new());
 
 
 delta_update({add_all, _Elems}, Actor, {_Clock0, _Entries, _Seen, _Deferred}, _Ctx) when is_tuple(Actor) ->
     {error, not_implemented};
 
-delta_update({add_all, Elems}=Op, ActorOrDot, {Clock0, _Entries, _Seen, _Deferred}=Obj, _Ctx) ->
+delta_update({add_all, Elems}=_Op, ActorOrDot, {Clock0, _Entries, _Seen, _Deferred}=_Obj, _Ctx) ->
     {_, DeltaORSet} = lists:foldl(fun(Elem , {Clock, DeltaAccIn}) ->
                                      {Dot, NewClock} = update_clock(ActorOrDot, Clock),
                                      {ok, DeltaAcc} = delta_add_elem(Elem, Dot, DeltaAccIn),
                                      {NewClock, DeltaAcc}
                              end, {Clock0, new()}, Elems),
-    {ok, ORSet} = update(Op, ActorOrDot,Obj),
-    {ok, {ORSet, DeltaORSet}};
-    %{ok, DeltaORSet};
+    {ok, DeltaORSet};
 
-delta_update({remove, Elem}, _Actor, {_, Entries, _, _}=ORSet0, Ctx) ->
-    {ok, Delta} = delta_remove_elem(Elem, ORSet0, new(), Ctx),
-    {ok, ORSet} = remove_elem(?DICT:find(Elem, Entries), Elem, ORSet0, Ctx),
-    {ok, {ORSet, Delta}};
-    %delta_remove_elem(Elem, ORSet0, new(), Ctx);
+delta_update({remove, Elem}, _Actor, {_, _Entries, _, _}=ORSet0, Ctx) ->
+  delta_remove_elem(Elem, ORSet0, new(), Ctx);
 
-delta_update({remove_all, Elems}, Actor, ORSet0, Ctx) ->
+delta_update({remove_all, Elems}, _Actor, ORSet0, Ctx) ->
     DeltaORSet = lists:foldl(fun(Elem , ORSetAcc) ->
                                 {ok, ORSetAcc2} = delta_remove_elem(Elem, ORSet0, ORSetAcc, Ctx),
                                 ORSetAcc2
                         end, new(), Elems),
-    {ok, ORSet} = remove_all(Elems, Actor, ORSet0, Ctx),
-    {ok, {ORSet, DeltaORSet}};
-    %{ok, DeltaORSet};
+    {ok, DeltaORSet};
 
 %TODO: This is not efficient
 delta_update({update, Ops}, ActorOrDot, ORSet0, Ctx) ->
@@ -397,7 +378,7 @@ apply_deferred({Clock, Entries, Seen, Deferred}) ->
                                                {ok, ORSet} = update({remove_all, Elems}, undefined, ORSetAcc, Ctx),
                        ORSet
                end,
-               {Clock, Entries, Seen, dict:new()},
+               {Clock, Entries, Seen, ?DICT:new()},
                Deferred).
 
 %% @doc check if each element in `Entries' should be in the merged
@@ -570,8 +551,8 @@ add_remove_test() ->
 
 concurrent_add_test() ->
     InitialState = new(),
-    {ok, {_CtxA1,_,_,_} = D_A1} = ?ADD(a, a, InitialState),
-    {ok, {_CtxB1,_,_,_} = D_B1} = ?ADD(b, b, InitialState),
+    {ok, D_A1} = ?ADD(a, actor1, InitialState),
+    {ok, D_B1} = ?ADD(b, actor2, InitialState),
     AB = merge(D_B1, merge(D_A1, InitialState)),
     ?assertEqual([a, b], value(AB)).
 

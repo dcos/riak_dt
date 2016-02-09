@@ -1,0 +1,5 @@
+-ifdef(TEST).
+-define(DICT, orddict).
+-else.
+-define(DICT, dict).
+-endif.

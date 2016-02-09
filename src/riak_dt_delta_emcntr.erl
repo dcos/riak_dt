@@ -255,9 +255,8 @@ merge_right(LHSClock, RHSUnique, Acc) ->
 %% @doc equality of two counters internal structure, not the `value/1'
 %% they produce.
 -spec equal(emcntr(), emcntr()) -> boolean().
-equal({ClockA, PNCntA}, {ClockB, PNCntB}) ->
-    riak_dt_vclock:equal(ClockA, ClockB) andalso
-        PNCntA =:= PNCntB.
+equal({ClockA, _EntriesA, PNCntA}, {ClockB, _EntriesB, PNCntB}) ->
+    riak_dt_vclock:equal(ClockA, ClockB) andalso PNCntA =:= PNCntB.
 
 %% @doc generate stats for this counter. Only `actor_count' is
 %% produced at present.
@@ -269,7 +268,7 @@ stats(Emcntr) ->
 %% `actor_count' is supported at present.  Return a `pos_integer()' for
 %% the stat requested, or `undefined' if stat type is unsupported.
 -spec stat(atom(), emcntr()) -> pos_integer() | undefined.
-stat(actor_count, {Clock, _Emcntr}) ->
+stat(actor_count, {Clock, _Entries, _Emcntr}) ->
     length(Clock);
 stat(_, _) -> undefined.
 
@@ -439,12 +438,27 @@ usage_test() ->
     {ok, PNCnt3_2} = update(increment, {a1, 2}, PNCnt3_1),
     {ok, PNCnt3_3} = update({decrement, 2}, {a5, 1}, PNCnt3_2),
     {ok, PNCnt2_3} = update(decrement, {a2, 2}, PNCnt2_2),
-    ?assertEqual({[{a1, 2}, {a2, 2}, {a3, 1}, {a4, 1}, {a5, 1}],
-                  [{a1, {2, 3,0}},
-                   {a2, {2, 1, 1}},
-                   {a3, {1, 3,0}},
-                   {a4, {1, 1, 0}},
-                   {a5, {1, 0,2}}]}, merge(PNCnt3_3, PNCnt2_3)).
+  ?debugFmt("~p", [merge(PNCnt3_3, PNCnt2_3)]),
+  %{riak_dt_vclock:vclock(), [entry()], deferred_deltas()}.
+    ?assertEqual({
+                  _Clock =
+                    [
+                      {a1, 2},
+                      {a2, 2},
+                      {a3, 1},
+                      {a4, 1},
+                      {a5, 1}
+                    ],
+                  _Entries =
+                    [
+                      {a1, {2, 3,0}},
+                      {a2, {2, 1, 1}},
+                      {a3, {1, 3,0}},
+                      {a4, {1, 1, 0}},
+                      {a5, {1, 0,2}}
+                    ],
+                  _Deferred = []
+    }, merge(PNCnt3_3, PNCnt2_3)).
 
 roundtrip_bin_test() ->
     PN = new(),

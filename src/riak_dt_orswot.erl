@@ -85,7 +85,7 @@
 -export([precondition_context/1, stats/1, stat/2]).
 -export([parent_clock/2, get_deferred/1]).
 
--define(DICT, dict).
+-include("dict.hrl").
 
 %% EQC API
 -ifdef(EQC).
@@ -616,7 +616,7 @@ short_list(Gen) ->
     ?SIZED(Size, resize(Size div 2, list(resize(Size, Gen)))).
 
 init_state() ->
-    {0, dict:new()}.
+    {0, ?DICT:new()}.
 
 do_updates(_ID, [], _OldState, NewState) ->
     NewState;
@@ -634,20 +634,20 @@ update_expected(ID, {update, Updates}, State) ->
 update_expected(ID, {add, Elem}, {Cnt0, Dict}) ->
     Cnt = Cnt0+1,
     ToAdd = {Elem, Cnt},
-    {A, R} = dict:fetch(ID, Dict),
-    {Cnt, dict:store(ID, {sets:add_element(ToAdd, A), R}, Dict)};
+    {A, R} = ?DICT:fetch(ID, Dict),
+    {Cnt, ?DICT:store(ID, {sets:add_element(ToAdd, A), R}, Dict)};
 update_expected(ID, {remove, Elem}, {Cnt, Dict}) ->
-    {A, R} = dict:fetch(ID, Dict),
+    {A, R} = ?DICT:fetch(ID, Dict),
     ToRem = [ {E, X} || {E, X} <- sets:to_list(A), E == Elem],
-    {Cnt, dict:store(ID, {A, sets:union(R, sets:from_list(ToRem))}, Dict)};
+    {Cnt, ?DICT:store(ID, {A, sets:union(R, sets:from_list(ToRem))}, Dict)};
 update_expected(ID, {merge, SourceID}, {Cnt, Dict}) ->
-    {FA, FR} = dict:fetch(ID, Dict),
-    {TA, TR} = dict:fetch(SourceID, Dict),
+    {FA, FR} = ?DICT:fetch(ID, Dict),
+    {TA, TR} = ?DICT:fetch(SourceID, Dict),
     MA = sets:union(FA, TA),
     MR = sets:union(FR, TR),
-    {Cnt, dict:store(ID, {MA, MR}, Dict)};
+    {Cnt, ?DICT:store(ID, {MA, MR}, Dict)};
 update_expected(ID, create, {Cnt, Dict}) ->
-    {Cnt, dict:store(ID, {sets:new(), sets:new()}, Dict)};
+    {Cnt, ?DICT:store(ID, {sets:new(), sets:new()}, Dict)};
 update_expected(ID, {add_all, Elems}, State) ->
     lists:foldl(fun(Elem, S) ->
                        update_expected(ID, {add, Elem}, S) end,
@@ -655,7 +655,7 @@ update_expected(ID, {add_all, Elems}, State) ->
                Elems);
 update_expected(ID, {remove_all, Elems}, {_Cnt, Dict}=State) ->
     %% Only if _all_ elements are in the set do we remove any elems
-    {A, R} = dict:fetch(ID, Dict),
+    {A, R} = ?DICT:fetch(ID, Dict),
     %% DO NOT consider tombstones as "in" the set, orswot does not have idempotent remove
     In = sets:subtract(A, R),
     Members = [ Elem || {Elem, _X} <- sets:to_list(In)],
@@ -670,7 +670,7 @@ update_expected(ID, {remove_all, Elems}, {_Cnt, Dict}=State) ->
     end.
 
 eqc_state_value({_Cnt, Dict}) ->
-    {A, R} = dict:fold(fun(_K, {Add, Rem}, {AAcc, RAcc}) ->
+    {A, R} = ?DICT:fold(fun(_K, {Add, Rem}, {AAcc, RAcc}) ->
                                {sets:union(Add, AAcc), sets:union(Rem, RAcc)} end,
                        {sets:new(), sets:new()},
                        Dict),

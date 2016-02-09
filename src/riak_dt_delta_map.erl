@@ -237,11 +237,8 @@ riak_dt_od_flag:od_flag_op() | riak_dt_map:map_op() | riak_dt_delta_map:map_op()
 
 -define(FRESH_CLOCK, riak_dt_vclock:fresh()).
 
--ifdef(EQC).
--define(DICT, orddict).
--else.
--define(DICT, dict).
--endif.
+-include("dict.hrl").
+
 
 %% @doc Create a new, empty Map.
 -spec new() -> delta_map().
