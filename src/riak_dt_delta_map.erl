@@ -193,7 +193,7 @@
 -export([gen_op/0, gen_op/1, gen_field/0, gen_field/1,  generate/0, size/1]).
 -endif.
 
--export_type([delta_map/0, binary_map/0, map_op/0]).
+-export_type([delta_map/0, binary_map/0, map_op/0, value/0]).
 
 -type binary_map() :: binary(). %% A binary that from_binary/1 will accept
 -type delta_map() :: {riak_dt_vclock:vclock(), entries(), deferred()}.
