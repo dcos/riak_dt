@@ -24,10 +24,12 @@
 %%
 %% @reference Leslie Lamport (1978). "Time, clocks, and the ordering of events
 %% in a distributed system". Communications of the ACM 21 (7): 558-565.
+%% [http://research.microsoft.com/en-us/um/people/lamport/pubs/time-clocks.pdf]
 %%
 %% @reference Friedemann Mattern (1988). "Virtual Time and Global States of
 %% Distributed Systems". Workshop on Parallel and Distributed Algorithms:
 %% pp. 215-226
+%% [http://homes.cs.washington.edu/~arvind/cs425/doc/mattern89virtual.pdf]
 
 -module(riak_dt_vclock).
 -compile(inline_list_funcs).
@@ -119,8 +121,8 @@ dominates2(_Va, _Vb) ->
     erlang:nif_error({error, not_loaded}).
 
 %% @doc subtract the VClock from the DotList.
-%% what this means is that any {actor(), count()} pair in
-%% DotList that is <= an entry in  VClock is removed from DotList
+%% what this means is that any `{actor(), count()}' pair in
+%% DotList that is &lt;= an entry in  VClock is removed from DotList
 %% Example [{a, 3}, {b, 2}, {d, 14}, {g, 22}] -
 %%         [{a, 4}, {b, 1}, {c, 1}, {d, 14}, {e, 5}, {f, 2}] =
 %%         [{{b, 2}, {g, 22}]
@@ -151,8 +153,8 @@ get_counter(Node, VClock) ->
     %% Best case scenario sort is O(N)
     %% This function's worst case scenario is O(N)
     case lists:keyfind(Node, 1, VClock) of
-	{_, Ctr} -> Ctr;
-	false           -> 0
+        {_, Ctr} -> Ctr;
+        false           -> 0
     end.
 
 % @doc Increment VClock at Node.
@@ -180,12 +182,12 @@ sort(Clock) ->
     ensure_sorted(Clock).
 
 %% @doc an effecient format for disk / wire.
-%5 @see `from_binary/1`
+%5 @see from_binary/1
 -spec to_binary(vclock()) -> binary_vclock().
 to_binary(Clock) ->
     term_to_binary(sort(Clock)).
 
-%% @doc takes the output of `to_binary/1` and returns a vclock
+%% @doc takes the output of `to_binary/1' and returns a vclock
 -spec from_binary(binary_vclock()) -> vclock().
 from_binary(Bin) ->
     sort(binary_to_term(Bin)).

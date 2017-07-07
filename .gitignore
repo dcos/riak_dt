@@ -11,3 +11,6 @@ data/*
 .eqc-info
 current_counterexample.eqc
 *.o
+.rebar/
+_build/
+priv/
