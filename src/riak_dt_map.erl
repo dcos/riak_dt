@@ -167,8 +167,7 @@
 
 -behaviour(riak_dt).
 
--include("r18.hrl").
-
+-include("riak_dt.hrl").
 
 -ifdef(EQC).
 -include_lib("eqc/include/eqc.hrl").
@@ -181,18 +180,20 @@
 %% API
 -export([new/0, value/1, value/2, update/3, update/4]).
 -export([merge/2, equal/2, to_binary/1, from_binary/1]).
+-export([to_binary/2]).
 -export([precondition_context/1, stats/1, stat/2]).
 -export([parent_clock/2]).
+-export([to_version/2]).
 
 %% EQC API
 -ifdef(EQC).
 -export([gen_op/0, gen_op/1, gen_field/0, gen_field/1,  generate/0, size/1]).
 -endif.
 
--export_type([dt_map/0, binary_map/0, map_op/0, precondition_error/0]).
+-export_type([riak_dt_map/0, binary_map/0, map_op/0, precondition_error/0]).
 
 -type binary_map() :: binary(). %% A binary that from_binary/1 will accept
--type dt_map() :: {riak_dt_vclock:vclock(), entries(), deferred()}.
+-type riak_dt_map() :: {riak_dt_vclock:vclock(), entries(), deferred()}.
 -type entries() :: [field()].
 -type field() :: {field_name(), field_value()}.
 -type field_name() :: {Name :: binary(), CRDTModule :: crdt_mod()}.
@@ -218,7 +219,7 @@
 -type crdt()  ::  riak_dt_emcntr:emcntr() | riak_dt_od_flag:od_flag() |
                   riak_dt_lwwreg:lwwreg() |
                   riak_dt_orswot:orswot() |
-                  riak_dt_map:dt_map().
+                  riak_dt_map:riak_dt_map().
 
 -type map_op() :: {update, [map_field_update() | map_field_op()]}.
 
@@ -237,18 +238,18 @@
 -type precondition_error() :: {error, {precondition, {not_present, field()}}}.
 
 %% @doc Create a new, empty Map.
--spec new() -> dt_map().
+-spec new() -> riak_dt_map().
 new() ->
     {riak_dt_vclock:fresh(), orddict:new(), orddict:new()}.
 
 %% @doc sets the clock in the map to that `Clock'. Used by a
 %% containing Map for sub-CRDTs
--spec parent_clock(riak_dt_vclock:vclock(), dt_map()) -> dt_map().
+-spec parent_clock(riak_dt_vclock:vclock(), riak_dt_map()) -> riak_dt_map().
 parent_clock(Clock, {_MapClock, Values, Deferred}) ->
     {Clock, Values, Deferred}.
 
 %% @doc get the current set of values for this Map
--spec value(dt_map()) -> values().
+-spec value(riak_dt_map()) -> values().
 value({_Clock, Values, _Deferred}) ->
     orddict:fold(fun({Name, Type}, CRDTs, Acc) ->
                          Merged = merge_crdts(Type, CRDTs),
@@ -274,13 +275,13 @@ merge_crdts(Type, {CRDTs, TS}) ->
     Type:merge(TS, V).
 
 %% @doc query map (not implemented yet)
--spec value(term(), dt_map()) -> values().
+-spec value(term(), riak_dt_map()) -> values().
 value(_, Map) ->
     value(Map).
 
-%% @doc update the `dt_map()' or a field in the `dt_map()' by executing
-%% the `map_op()'. `Ops' is a list of one or more of the following
-%% ops:
+%% @doc update the `riak_dt_map()' or a field in the `riak_dt_map()'
+%% by executing the `map_op()'. `Ops' is a list of one or more of
+%% the following ops:
 %%
 %% `{update, field(), Op} where `Op' is a valid update operation for a
 %% CRDT of type `Mod' from the `Key' pair `{Name, Mod}' If there is no
@@ -294,8 +295,8 @@ value(_, Map) ->
 %%  still present, and it's value will contain the concurrent update.
 %%
 %% Atomic, all of `Ops' are performed successfully, or none are.
--spec update(map_op(), riak_dt:actor() | riak_dt:dot(), dt_map()) ->
-                    {ok, dt_map()} | precondition_error().
+-spec update(map_op(), riak_dt:actor() | riak_dt:dot(), riak_dt_map()) ->
+                    {ok, riak_dt_map()} | precondition_error().
 update(Op, ActorOrDot, Map) ->
     update(Op, ActorOrDot, Map, undefined).
 
@@ -305,8 +306,8 @@ update(Op, ActorOrDot, Map) ->
 %% types. hence the common clock.
 %%
 %% @see parent_clock/2
--spec update(map_op(), riak_dt:actor() | riak_dt:dot(), dt_map(), riak_dt:context()) ->
-                    {ok, dt_map()} | precondition_error().
+-spec update(map_op(), riak_dt:actor() | riak_dt:dot(), riak_dt_map(), riak_dt:context()) ->
+                    {ok, riak_dt_map()} | precondition_error().
 update({update, Ops}, ActorOrDot, {Clock0, Values, Deferred}, Ctx) ->
     {Dot, Clock} = update_clock(ActorOrDot, Clock0),
     apply_ops(Ops, Dot, {Clock, Values, Deferred}, Ctx).
@@ -327,7 +328,7 @@ update_clock(Actor, Clock) ->
 %% @private
 -spec apply_ops([map_field_update() | map_field_op()], riak_dt:dot(),
                 {riak_dt_vclock:vclock(), entries() , deferred()}, context()) ->
-                       {ok, dt_map()} | precondition_error().
+                       {ok, riak_dt_map()} | precondition_error().
 apply_ops([], _Dot, Map, _Ctx) ->
     {ok, Map};
 apply_ops([{update, {_Name, Type}=Field, Op} | Rest], Dot, {Clock, Values, Deferred}, Ctx) ->
@@ -366,8 +367,8 @@ apply_ops([{remove, Field} | Rest], Dot, Map, Ctx) ->
 %%
 %% @see defer_remove/4 for handling of removes of fields that are
 %% _not_ present
--spec remove_field(field(), dt_map(), context()) ->
-                          {ok, dt_map()} | precondition_error().
+-spec remove_field(field(), riak_dt_map(), context()) ->
+                          {ok, riak_dt_map()} | precondition_error().
 remove_field(Field, {Clock, Values, Deferred}, undefined) ->
     case orddict:find(Field, Values) of
         error ->
@@ -389,7 +390,7 @@ remove_field(Field, {Clock, Values, Deferred0}, Ctx) ->
 %% @private drop dominated fields
 ctx_rem_field(_Field, error, _Ctx_, _Clock) ->
     empty;
-ctx_rem_field({_, Type}, {ok, {CRDTs, TS0}}, Ctx, MapClock) ->
+ctx_rem_field({{_, Type}, _}, {ok, {CRDTs, TS0}}, Ctx, MapClock) ->
     %% Drop dominated fields, and update the tombstone.
     %%
     %% If the context is removing a field at dot {a, 1} and the
@@ -440,8 +441,8 @@ defer_remove(Clock, Ctx, Field, Deferred) ->
                                 Deferred)
     end.
 
-%% @doc merge two `dt_map()'s.
--spec merge(dt_map(), dt_map()) -> dt_map().
+%% @doc merge two `riak_dt_map()'s.
+-spec merge(riak_dt_map(), riak_dt_map()) -> riak_dt_map().
 merge(Map, Map) ->
     Map;
 %% @TODO is there a way to optimise this, based on clocks maybe?
@@ -456,7 +457,7 @@ merge({LHSClock, LHSEntries, LHSDeferred}, {RHSClock, RHSEntries, RHSDeferred}) 
 
 %% @private filter the set of fields that are on one side of a merge
 %% only.
--spec filter_unique(set(), entries(), riak_dt_vclock:vclock(), entries()) -> entries().
+-spec filter_unique(sets:set(), entries(), riak_dt_vclock:vclock(), entries()) -> entries().
 filter_unique(FieldSet, Entries, Clock, Acc) ->
     sets:fold(fun({_Name, Type}=Field, Keep) ->
                       {Dots, TS} = orddict:fetch(Field, Entries),
@@ -491,13 +492,13 @@ is_dot_unseen(Dot, Clock) ->
     not riak_dt_vclock:descends(Clock, [Dot]).
 
 %% @doc Get the keys from an orddict as a set
--spec key_set(orddict:orddict()) -> set().
+-spec key_set(orddict:orddict()) -> sets:set().
 key_set(Orddict) ->
     sets:from_list(orddict:fetch_keys(Orddict)).
 
 %% @doc break the keys from an two orddicts out into three sets, the
 %% common keys, those unique to one, and those unique to the other.
--spec key_sets(orddict:orddict(), orddict:orddict()) -> {set(), set(), set()}.
+-spec key_sets(orddict:orddict(), orddict:orddict()) -> {sets:set(), sets:set(), sets:set()}.
 key_sets(LHS, RHS) ->
     LHSet = key_set(LHS),
     RHSet = key_set(RHS),
@@ -508,7 +509,7 @@ key_sets(LHS, RHS) ->
 
 %% @private for a set of dots (that are unique to one side) decide
 %% whether to keep, or drop each.
--spec filter_dots(set(), orddict:orddict(), riak_dt_vclock:vclock()) -> entries().
+-spec filter_dots(sets:set(), entries(), riak_dt_vclock:vclock()) -> entries().
 filter_dots(Dots, CRDTs, Clock) ->
     DotsToKeep = sets:filter(fun(Dot) ->
                                      is_dot_unseen(Dot, Clock)
@@ -572,8 +573,8 @@ apply_deferred(Clock, Entries, Deferred) ->
                 Deferred).
 
 %% @private
--spec remove_all([field()], dt_map(), context()) ->
-                        dt_map().
+-spec remove_all([field()], riak_dt_map(), context()) ->
+                        riak_dt_map().
 remove_all(Fields, Map, Ctx) ->
     lists:foldl(fun(Field, MapAcc) ->
                         {ok, MapAcc2}= remove_field(Field, MapAcc, Ctx),
@@ -582,10 +583,10 @@ remove_all(Fields, Map, Ctx) ->
                 Map,
                 Fields).
 
-%% @doc compare two `dt_map()'s for equality of structure Both schemas
+%% @doc compare two `riak_dt_map()'s for equality of structure Both schemas
 %% and value list must be equal. Performs a pariwise equals for all
 %% values in the value lists
--spec equal(dt_map(), dt_map()) -> boolean().
+-spec equal(riak_dt_map(), riak_dt_map()) -> boolean().
 equal({Clock1, Values1, Deferred1}, {Clock2, Values2, Deferred2}) ->
     riak_dt_vclock:equal(Clock1, Clock2) andalso
         Deferred1 == Deferred2 andalso
@@ -616,7 +617,7 @@ pairwise_equals(_, _) ->
 %% that only seen fields are removed. If a field removal operation has
 %% a context that the Map has not seen, it will be deferred until
 %% causally relevant.
--spec precondition_context(dt_map()) -> riak_dt:context().
+-spec precondition_context(riak_dt_map()) -> riak_dt:context().
 precondition_context({Clock, _Field, _Deferred}) ->
     Clock.
 
@@ -628,11 +629,11 @@ precondition_context({Clock, _Field, _Deferred}) ->
 %%                basically `field_count' - ( unique fields)
 %% `deferred_length': How many operations on the deferred list, a reasonable expression
 %%                   of lag/staleness.
--spec stats(dt_map()) -> [{atom(), integer()}].
+-spec stats(riak_dt_map()) -> [{atom(), integer()}].
 stats(Map) ->
     [ {S, stat(S, Map)} || S <- [actor_count, field_count, duplication, deferred_length]].
 
--spec stat(atom(), dt_map()) -> number() | undefined.
+-spec stat(atom(), riak_dt_map()) -> number() | undefined.
 stat(actor_count, {Clock, _, _}) ->
     length(Clock);
 stat(field_count, {_, Fields, _}) ->
@@ -653,26 +654,41 @@ stat(_,_) -> undefined.
 -define(TAG, ?DT_MAP_TAG).
 -define(V1_VERS, 1).
 
-%% @doc returns a binary representation of the provided `dt_map()'. The
-%% resulting binary is tagged and versioned for ease of future
+%% @doc returns a binary representation of the provided `riak_dt_map()'.
+%% The resulting binary is tagged and versioned for ease of future
 %% upgrade. Calling `from_binary/1' with the result of this function
 %% will return the original map.  Use the application env var
 %% `binary_compression' to turn t2b compression on (`true') and off
 %% (`false')
 %%
 %% @see `from_binary/1'
--spec to_binary(dt_map()) -> binary_map().
+-spec to_binary(riak_dt_map()) -> binary_map().
 to_binary(Map) ->
-    <<?TAG:8/integer, ?V1_VERS:8/integer, (riak_dt:to_binary(Map))/binary>>.
+    {ok, B} = to_binary(?V1_VERS, Map),
+    B.
+
+-spec to_binary(TargetVers :: pos_integer(), riak_dt_map()) ->
+     {ok, binary()} | ?UNSUPPORTED_VERSION.
+to_binary(S, ?V1_VERS) ->
+    {ok, <<?TAG:8/integer, ?V1_VERS:8/integer, (riak_dt:to_binary(S))/binary>>};
+to_binary(_S, Version) ->
+    ?UNSUPPORTED_VERSION(Version).
+
+-spec to_version(pos_integer(), riak_dt_map()) -> riak_dt_map().
+to_version(_, Map) -> Map.
 
 %% @doc When the argument is a `binary_map()' produced by
-%% `to_binary/1' will return the original `dt_map()'.
+%% `to_binary/1' will return the original `riak_dt_map()'.
 %%
 %% @see `to_binary/1'
--spec from_binary(binary_map()) -> dt_map().
+-spec from_binary(binary_map()) -> {ok, riak_dt_map()} | ?UNSUPPORTED_VERSION | ?INVALID_BINARY.
 from_binary(<<?TAG:8/integer, ?V1_VERS:8/integer, B/binary>>) ->
-    riak_dt:from_binary(B).
-
+    Map = riak_dt:from_binary(B),
+    {ok, Map};
+from_binary(<<?TAG:8/integer, Vers:8/integer, _B/binary>>) ->
+    ?UNSUPPORTED_VERSION(Vers);
+from_binary(_B) ->
+    ?INVALID_BINARY.
 
 %% ===================================================================
 %% EUnit tests

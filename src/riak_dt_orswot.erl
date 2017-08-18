@@ -62,8 +62,6 @@
 
 -behaviour(riak_dt).
 
--include("r18.hrl").
-
 -ifdef(EQC).
 -include_lib("eqc/include/eqc.hrl").
 -define(QC_OUT(P),
@@ -80,8 +78,10 @@
 -export([new/0, value/1, value/2]).
 -export([update/3, update/4, merge/2, equal/2]).
 -export([to_binary/1, from_binary/1]).
+-export([to_binary/2]).
 -export([precondition_context/1, stats/1, stat/2]).
 -export([parent_clock/2]).
+-export([to_version/2]).
 
 %% EQC API
 -ifdef(EQC).
@@ -90,10 +90,13 @@
 
 -endif.
 
--export_type([legacy_orswot/0, orswot/0, orswot_op/0, binary_orswot/0]).
+-export_type([any_orswot/0, orswot/0, orswot_v0/0, orswot_v1/0]).
+-export_type([orswot_op/0, binary_orswot/0]).
 
--opaque legacy_orswot() :: {riak_dt_vclock:vclock(), legacy_entries(), deferred()}.
--opaque orswot() :: {riak_dt_vclock:vclock(), entries(), deferred()}.
+-type orswot() :: orswot_v1().
+-opaque orswot_v0() :: {riak_dt_vclock:vclock(), entries_v0(), deferred()}.
+-opaque orswot_v1() :: {riak_dt_vclock:vclock(), entries(), deferred()}.
+-type any_orswot() :: orswot_v0() | orswot_v1().
 %% Only removes can be deferred, so a list of members to be removed
 %% per context.
 -type deferred() :: [{riak_dt_vclock:vclock(), [member()]}].
@@ -109,7 +112,7 @@
 %% a dict of member() -> minimal_clock() mappings.  The
 %% `minimal_clock()' is a more effecient way of storing knowledge
 %% about adds / removes than a UUID per add.
--type legacy_entries() ::[{member(), minimal_clock()}].
+-type entries_v0() ::[{member(), minimal_clock()}].
 -type entries() :: #{member() => minimal_clock()}.
 
 %% a minimal clock is just the dots for the element, each dot being an
@@ -132,27 +135,26 @@ new() ->
 parent_clock(Clock, {_SetClock, Entries, Deferred}) ->
     {Clock, Entries, Deferred}.
 
--spec value(orswot() | legacy_orswot()) -> [member()].
-value({_Clock, Entries, _Deferred}) when is_list(Entries) ->
-    [K || {K, _Dots} <- orddict:to_list(Entries)];
+-spec value(any_orswot()) -> [member()].
+value({_Clock, Entries, _Deferred} = V0Set) when is_list(Entries) ->
+    value(to_v1(V0Set));
 value({_Clock, Entries, _Deferred}) ->
     [K || {K, _Dots} <- maps:to_list(Entries)].
 
--spec value(orswot_q(), orswot() | legacy_orswot()) -> term().
+-spec value(orswot_q(), any_orswot()) -> term().
 value(size, {_Clock, Entries, _Deferred}) when is_map(Entries) ->
     maps:size(Entries);
-value(size, ORset) ->
-    length(value(ORset));
-value({contains, Elem}, ORset) ->
-    lists:member(Elem, value(ORset)).
+value(size, V0Set) ->
+    value(size, to_v1(V0Set));
+value({contains, Elem}, S) ->
+    lists:member(Elem, value(S)).
 
 %% @doc take a list of Set operations and apply them to the set.
 %% NOTE: either _all_ are applied, or _none_ are.
--spec update(orswot_op(), actor() | dot(), orswot() | legacy_orswot()) -> {ok, orswot()} |
+-spec update(orswot_op(), actor() | dot(), any_orswot()) -> {ok, orswot()} |
                                                 precondition_error().
-update(Op, Actor, {Clock, Entries0, Deferred}) when is_list(Entries0) ->
-    Entries1 = maps:from_list(Entries0),
-    update(Op, Actor, {Clock, Entries1, Deferred});
+update(Op, Actor, {_Clock, Entries0, _Deferred} = V0Set) when is_list(Entries0) ->
+    update(Op, Actor, to_v1(V0Set));
 update({update, Ops}, Actor, ORSet) ->
     apply_ops(Ops, Actor, ORSet);
 update({add, Elem}, Actor, ORSet) ->
@@ -170,7 +172,7 @@ update({add_all, Elems}, Actor, ORSet) ->
 update({remove_all, Elems}, Actor, ORSet) ->
     remove_all(Elems, Actor, ORSet).
 
--spec update(orswot_op(), actor() | dot(), legacy_orswot() | orswot(), riak_dt:context()) ->
+-spec update(orswot_op(), actor() | dot(), any_orswot(), riak_dt:context()) ->
                     {ok, orswot()} | precondition_error().
 update(Op, Actor, {Clock, Entries0, Deferred}, Context) when is_list(Entries0) ->
     Entries1 = map:from_list(Entries0),
@@ -273,13 +275,11 @@ remove_all([Elem | Rest], Actor, ORSet, Ctx) ->
     {ok, ORSet2} =  update({remove, Elem}, Actor, ORSet, Ctx),
     remove_all(Rest, Actor, ORSet2, Ctx).
 
--spec merge(orswot() | legacy_orswot(), orswot() | legacy_orswot()) -> orswot().
-merge({LHSClock, LHSEntries0, LHSDeferred}, RHS) when is_list(LHSEntries0) ->
-    LHSEntries1 = maps:from_list(LHSEntries0),
-    merge({LHSClock, LHSEntries1, LHSDeferred}, RHS);
-merge(LHS, {RHSClock, RHSEntries0, RHSDeferred}) when is_list(RHSEntries0) ->
-    RHSEntries1 = maps:from_list(RHSEntries0),
-    merge(LHS, {RHSClock, RHSEntries1, RHSDeferred});
+-spec merge(any_orswot(), any_orswot()) -> orswot().
+merge({_LHSClock, LHSEntries0, _LHSDeferred} = V0Set, RHS) when is_list(LHSEntries0) ->
+    merge(to_v1(V0Set), RHS);
+merge(LHS, {_RHSClock, RHSEntries0, _RHSDeferred} = V0Set) when is_list(RHSEntries0) ->
+    merge(LHS, to_v1(V0Set));
 merge({Clock, Entries, Deferred}, {Clock, Entries, Deferred}) ->
     {Clock, Entries, Deferred};
 merge(?EMPTY_ORSWOT, RHS) -> RHS;
@@ -384,13 +384,11 @@ merge_common_keys({LHSClock, LHSEntries, _}, {RHSClock, RHSEntries, _}) ->
         maps:new(),
         LHSKeys).
 
--spec equal(orswot() | legacy_orswot(), orswot() | legacy_orswot()) -> boolean().
-equal({Clock, Entries0, Deferred}, Rhs) when is_list(Entries0) ->
-    Entries1 = maps:from_list(Entries0),
-    equal({Clock, Entries1, Deferred}, Rhs);
-equal(Lhs, {Clock, Entries0, Deferred}) when is_list(Entries0) ->
-    Entries1 = maps:from_list(Entries0),
-    equal(Lhs, {Clock, Entries1, Deferred});
+-spec equal(any_orswot(), any_orswot()) -> boolean().
+equal({_Clock, Entries0, _Deferred} = V0Set, Rhs) when is_list(Entries0) ->
+    equal(to_v1(V0Set), Rhs);
+equal(Lhs, {_Clock, Entries0, _Deferred} = V0Set) when is_list(Entries0) ->
+    equal(Lhs, to_v1(V0Set));
 equal({Clock1, Entries1, _}, {Clock2, Entries2, _}) ->
     riak_dt_vclock:equal(Clock1, Clock2) andalso
         Entries1 == Entries2 andalso
@@ -474,15 +472,38 @@ stat(_,_) -> undefined.
 %% @see `from_binary/1'
 -spec to_binary(orswot()) -> binary_orswot().
 to_binary(S) ->
-     <<?TAG:8/integer, ?V1_VERS:8/integer, (riak_dt:to_binary(S))/binary>>.
+    {ok, B} = to_binary(?V1_VERS, S),
+    B.
+
+%% @private encode v1 sets. The first argument is the target binary type.
+-spec to_binary(Vers :: pos_integer(), orswot()) -> {ok, binary_orswot()} | ?UNSUPPORTED_VERSION.
+to_binary(?V1_VERS, S) ->
+    {ok, <<?TAG:8/integer, ?V1_VERS:8/integer, (riak_dt:to_binary(S))/binary>>};
+to_binary(Vers, _S0) ->
+    ?UNSUPPORTED_VERSION(Vers).
+
+-spec to_version(pos_integer(), orswot()) -> orswot().
+to_version(_, Set) -> Set.
+
+to_v1({Clock, Entries0, Deferred}) when is_list(Entries0) ->
+    Entries1 = maps:from_list(Entries0),
+    {Clock, Entries1, Deferred};
+to_v1(S) ->
+    S.
 
 %% @doc When the argument is a `binary_orswot()' produced by
 %% `to_binary/1' will return the original `orswot()'.
 %%
 %% @see `to_binary/1'
--spec from_binary(binary_orswot()) -> orswot().
+-spec from_binary(binary_orswot()) -> {ok, orswot()} | ?UNSUPPORTED_VERSION | ?INVALID_BINARY.
 from_binary(<<?TAG:8/integer, ?V1_VERS:8/integer, B/binary>>) ->
-    riak_dt:from_binary(B).
+    S = riak_dt:from_binary(B),
+    %% Now upgrade the structure to dict from orddict
+    {ok, S};
+from_binary(<<?TAG:8/integer, Vers:8/integer, _B/binary>>) ->
+    ?UNSUPPORTED_VERSION(Vers);
+from_binary(_B) ->
+    ?INVALID_BINARY.
 
 %% ===================================================================
 %% EUnit tests
