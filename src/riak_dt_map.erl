@@ -190,7 +190,7 @@
 -export([gen_op/0, gen_op/1, gen_field/0, gen_field/1,  generate/0, size/1]).
 -endif.
 
--export_type([riak_dt_map/0, binary_map/0, map_op/0]).
+-export_type([riak_dt_map/0, binary_map/0, map_op/0, precondition_error/0]).
 
 -type binary_map() :: binary(). %% A binary that from_binary/1 will accept
 -type riak_dt_map() :: {riak_dt_vclock:vclock(), entries(), deferred()}.
@@ -307,7 +307,7 @@ update(Op, ActorOrDot, Map) ->
 %%
 %% @see parent_clock/2
 -spec update(map_op(), riak_dt:actor() | riak_dt:dot(), riak_dt_map(), riak_dt:context()) ->
-                    {ok, riak_dt_map()}.
+                    {ok, riak_dt_map()} | precondition_error().
 update({update, Ops}, ActorOrDot, {Clock0, Values, Deferred}, Ctx) ->
     {Dot, Clock} = update_clock(ActorOrDot, Clock0),
     apply_ops(Ops, Dot, {Clock, Values, Deferred}, Ctx).
