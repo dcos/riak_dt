@@ -46,7 +46,7 @@ ERL_NIF_TERM is_sorted_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) 
         return badarg;
 }
 
-static inline ErlNifSInt64 max(ErlNifSInt64 i1, ErlNifSInt64 i2) {
+static inline ErlNifSInt64 MAX(ErlNifSInt64 i1, ErlNifSInt64 i2) {
     if (i1 > i2)
         return i1;
     else
@@ -85,7 +85,7 @@ ERL_NIF_TERM merge2_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
             if (!enif_get_int64(env, tuplerhs[1], &valrhs))
                 return badarg;
 
-            newtuple = enif_make_tuple2(env, tuplelhs[0], enif_make_int64(env, max(vallhs, valrhs)));
+            newtuple = enif_make_tuple2(env, tuplelhs[0], enif_make_int64(env, MAX(vallhs, valrhs)));
             retlist = enif_make_list_cell(env, newtuple, retlist);
             /* Pop both lists */
             listlhs = taillhs;
